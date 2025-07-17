@@ -1,0 +1,8 @@
+pm.globals.set("incrementBagBarcode", `function incrementBagBarcode() {
+    eval(pm.globals.get("getRandomInt"));
+    let currentBarcode = pm.environment.get("bagBarcode");
+    let newBarcode = (!currentBarcode)
+        ? getRandomInt(100000000000000000, 900000000000000000).toString()
+        : (BigInt(currentBarcode) + BigInt(1)).toString();
+    pm.environment.set("bagBarcode", newBarcode);
+}`);

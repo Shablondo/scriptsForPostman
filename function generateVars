@@ -1,0 +1,10 @@
+pm.globals.set("generateVars", `function generateVars() {
+    const now = new Date();
+    const randomLetters = len => Array.from({ length: len }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]).join('');
+    const randomNumbers = len => Math.floor(Math.pow(10, len - 1) + Math.random() * 9 * Math.pow(10, len - 1)).toString().slice(0, len);
+
+    pm.variables.set("trxId", now.toISOString().replace(/[-:T.Z]/g, '').slice(0, 17));
+    pm.variables.set("currentDate", now.toLocaleString('ru-RU').replace(/,/g, ''));
+    pm.variables.set("carNumber", randomLetters(2) + randomNumbers(6));
+    pm.variables.set("tourNumber", randomLetters(4) + '-AUTO-' + now.toISOString().slice(0, 10).replace(/-/g, '') + '-' + randomNumbers(4));
+}`);

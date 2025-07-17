@@ -110,3 +110,22 @@ pm.globals.set("fetchEntityVariables", `function fetchEntityVariables({ entityTy
 
     execute();
 }`);
+
+
+Пример вызова функции:
+
+eval(pm.globals.get("fetchEntityVariables"));
+
+fetchEntityVariables({
+    entityType: "DELIVERY_TASK",
+    entityIdOrArray: [pm.environment.get("cargoId1")],
+    variablesMapping: [
+        { envVar: "omniBarcodeForCargoId1", field: "barcode" },
+        { envVar: "shipmentIdForCargoId1", field: "shipmentId", legIndex: 0, legType: "FIRST_MILE" },
+        { envVar: "currentLocationId", field: "receiverId", legIndex: 0, legType: "FIRST_MILE" },
+        { envVar: "currentCargoLegForCargoId1", field: "id", legIndex: 0, legType: "MIDDLE_MILE" },
+        { envVar: "nextLocationId", field: "receiverId", legIndex: 0, legType: "MIDDLE_MILE" },
+        { collectionVar: "cargoLegNoForCargo1", field: "cargoLegNo", legIndex: 0, legType: "MIDDLE_MILE" }
+    ]
+});
+

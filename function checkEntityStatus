@@ -79,3 +79,14 @@ pm.globals.set("checkEntityStatus", `function checkEntityStatus(checks) {
         });
     });
 }`);
+
+
+Пример вызова функции:
+eval(pm.globals.get("checkEntityStatus"));
+
+checkEntityStatus({
+    entityType: "CARGO",
+    expectedStatuses: ["COMPLECTED_IN_WAREHOUSE"],
+    idVariableOrArray: [pm.environment.get("cargoId1"), pm.environment.get("cargoId2")],
+});
+

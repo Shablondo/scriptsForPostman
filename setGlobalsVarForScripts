@@ -1,0 +1,86 @@
+pm.globals.set("RETRY_SETTINGS", JSON.stringify({
+    STATUS_CHECK: {
+        MAX_ATTEMPTS: 20,
+        DELAY_MS: 1000
+    },
+    VARIABLES_FETCH: {
+        MAX_ATTEMPTS: 60,
+        DELAY_MS: 1000
+    }
+}));
+
+
+pm.globals.set("LOG_SETTINGS", JSON.stringify({
+    STATUS_CHECK: {
+        PREFIX: "🚚 [StatusCheck]",
+        VERBOSE: true
+    },
+    VARIABLES_FETCH: {
+        PREFIX: "📦 [VariablesFetch]",
+        VERBOSE: true
+    },
+    ROUTE_PROCESS: {
+        PREFIX: "🛣️ [RouteProcess]",
+        VERBOSE: true
+    }
+}));
+
+
+pm.globals.set("STATUS_CHECKERS_CONFIG", JSON.stringify({
+    CARGO: {
+        endpoint: "***",
+        serviceName: "cargo",
+        type: "CARGO"
+    },
+    TRANSIT_CARGO: {
+        endpoint: "***",
+        serviceName: "delivery",
+        type: "TRANSIT_CARGO"
+    },
+    WH_TASK: {
+        endpoint: "***",
+        serviceName: "delivery",
+        type: "WH_TASK",
+        queryParam: "orderId"
+    }
+}));
+
+
+pm.globals.set("VARIABLES_FETCH_CONFIGS", JSON.stringify({
+    DELIVERY_TASK: {
+        endpoint: "***",
+        serviceName: "delivery",
+        type: "DELIVERY_TASK_VARS"
+    },
+    TRANSIT_CARGO: {
+        endpoint: "***",
+        serviceName: "delivery",
+        type: "TRANSIT_CARGO_VARS",
+        queryParam: "barcode"
+    },
+    WH_TASK: {
+        endpoint: "***",
+        serviceName: "delivery",
+        type: "WH_TASK_VARS",
+        defaultStatus: "ACCEPTED_BY_WMS",
+        queryParam: "orderId"
+    },
+    PICKUP_POINT: {
+        endpoint: "***",
+        serviceName: "pickup-point",
+        type: "PICKUP_POINT_VARS"
+    },
+    LOCATION: {
+        endpoint: "***",
+        serviceName: "location",
+        type: "LOCATION_VARS"
+    },
+    PICKUP_TASK: {
+        endpoint: "***",
+        serviceName: "pickup",
+        type: "PICKUP_TASK_VARS"
+    }
+}));
+
+
+pm.globals.set("ENABLE_STATUS_CHECK", true);

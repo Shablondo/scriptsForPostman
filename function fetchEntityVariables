@@ -1,0 +1,112 @@
+pm.globals.set("fetchEntityVariables", `function fetchEntityVariables({ entityType, entityIdOrArray, variablesMapping }, customSettings = {}) {
+    const retrySettings = JSON.parse(pm.globals.get("RETRY_SETTINGS")).VARIABLES_FETCH;
+    const logSettings = JSON.parse(pm.globals.get("LOG_SETTINGS")).VARIABLES_FETCH;
+    const serviceConfig = JSON.parse(pm.globals.get("VARIABLES_FETCH_CONFIGS"))[entityType];
+
+    if (!serviceConfig) throw new Error("Неизвестный тип сущности: " + entityType);
+
+    const finalRetry = { ...retrySettings, ...customSettings.retry };
+    const finalLog = { ...logSettings, ...customSettings.log };
+    let attemptCount = 0;
+    const missingVarsHistory = new Set();
+
+    function log(message, emoji = "", force = false) {
+        if (finalLog.VERBOSE || force) {
+            console.log(\`\${finalLog.PREFIX} [\${serviceConfig.type}] \${emoji} \${message}\`);
+        }
+    }
+
+    function execute() {
+        attemptCount++;
+        log(\`Получение переменных (попытка \${attemptCount}/\${finalRetry.MAX_ATTEMPTS})\`, "🔍");
+
+        let url = \`https://\${serviceConfig.serviceName}\${pm.globals.get("env")}\${serviceConfig.endpoint}\`;
+        let request;
+
+        if (serviceConfig.queryParam) {
+            const paramValue = Array.isArray(entityIdOrArray) ? entityIdOrArray[0] : entityIdOrArray;
+            url += \`?\${serviceConfig.queryParam}=\${encodeURIComponent(paramValue)}\`;
+            request = { url: url, method: 'GET' };
+        } else if (Array.isArray(entityIdOrArray)) {
+            request = {
+                url: url,
+                method: 'POST',
+                header: { 'Content-Type': 'application/json' },
+                body: { mode: 'raw', raw: JSON.stringify({ is_active: true, cargoIds: entityIdOrArray }) }
+            };
+        } else {
+            url += entityIdOrArray ? \`/\${entityIdOrArray}\` : '';
+            request = { url: url, method: 'GET' };
+        }
+
+        pm.sendRequest(request, (err, res) => {
+            if (err) return handleError(\`Ошибка запроса: \${err.message}\`);
+            try {
+                const data = res.json();
+                const dataObj = Array.isArray(data) ? data[0] : data;
+                processVariables(dataObj);
+            } catch (error) {
+                handleError(\`Ошибка обработки: \${error.message}\`);
+            }
+        });
+    }
+
+    function processVariables(data) {
+        const missingVars = [];
+        (variablesMapping || []).forEach(({ envVar, collectionVar, localVar, field, legType, legIndex = 0 }) => {
+            let value;
+            if (!legType) {
+                value = data?.[field];
+            } else {
+                const legs = Array.isArray(data.cargoLegs)
+                    ? data.cargoLegs.filter(l => l.cargoLegType === legType)
+                    : [];
+                value = legs[legIndex]?.[field];
+            }
+            const varName = collectionVar || envVar || localVar;
+            if (localVar) {
+                pm.variables.set(localVar, value);
+            } else if (collectionVar) {
+                pm.collectionVariables.set(collectionVar, value);
+            } else if (envVar) {
+                pm.environment.set(envVar, value);
+            }
+            if (value === null || value === undefined) {
+                missingVars.push(varName);
+            }
+        });
+
+        if (missingVars.length > 0) {
+            missingVars.forEach(v => missingVarsHistory.add(v));
+            log(\`Отсутствуют переменные: \${missingVars.join(', ')}\`, "⚠️", true);
+            handleRetry(\`Отсутствуют переменные: \${missingVars.join(', ')}\`);
+        } else {
+            log("Все переменные успешно получены", "🎉", true);
+            pm.test(\`Успешное получение \${serviceConfig.type}\`, () => pm.expect(true).to.be.true);
+            if (typeof customSettings.onComplete === "function") customSettings.onComplete(true);
+        }
+    }
+
+    function handleError(message) {
+        log(message, "⚠️", true);
+        handleRetry(message);
+    }
+
+    function handleRetry(message) {
+        if (attemptCount < finalRetry.MAX_ATTEMPTS) {
+            log(\`Повторный запрос через \${finalRetry.DELAY_MS}ms...\`, "🔄");
+            setTimeout(execute, finalRetry.DELAY_MS);
+        } else {
+            const allMissing = Array.from(missingVarsHistory).join(', ');
+            pm.test(\`Не удалось получить \${serviceConfig.type}\`, () => {
+                pm.expect.fail(\`Проблемные переменные: \${allMissing || 'не указано'}\`);
+            });
+            if (typeof customSettings.onComplete === "function") customSettings.onComplete(false);
+        }
+    }
+
+    if (!entityIdOrArray) throw new Error("Необходим entityId или массив cargoIds");
+    if (!variablesMapping) throw new Error("Необходим variablesMapping");
+
+    execute();
+}`);

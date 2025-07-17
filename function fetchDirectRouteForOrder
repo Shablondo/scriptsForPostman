@@ -1,0 +1,72 @@
+pm.globals.set("fetchDirectRouteForOrder", `function fetchDirectRouteForOrder(response, customSettings = {}) {
+    const logSettings = JSON.parse(pm.globals.get("LOG_SETTINGS")).ROUTE_PROCESS;
+    if (!logSettings) throw new Error("Конфиг ROUTE_PROCESS не найден в LOG_SETTINGS");
+
+    function log(message, emoji = "", force = false) {
+        if (logSettings.VERBOSE || force) {
+            console.log(\`\${logSettings.PREFIX} \${emoji} \${message}\`);
+        }
+    }
+
+    log("Начало обработки ответа route...", "🚀");
+
+    // 1. Проверка основного ответа
+    if (!response || !Array.isArray(response) || response.length === 0) {
+        log("Ответ пустой или имеет неверный формат.", "❌", true);
+        if (typeof customSettings.onComplete === "function") customSettings.onComplete(false);
+        return;
+    }
+
+    const route = response[0];
+
+    // 2. Синхронная часть: Сохраняем основные переменные
+    const { end: receiverLocationId, start: senderLocationId } = route;
+    pm.environment.set("receiverLocationId", receiverLocationId);
+    pm.environment.set("senderLocationId", senderLocationId);
+    log("Сохранены receiverLocationId и senderLocationId.", "✅");
+
+    const storeLeg = route.route?.find(leg => leg.finalLocationType === "STORE");
+    if (storeLeg) {
+        pm.collectionVariables.set("lastWhForJourney", storeLeg.initialLocationId);
+        pm.collectionVariables.set("storeForJourney", storeLeg.finalLocationId);
+        log("Найден и сохранен store leg.", "✅");
+    } else {
+        log("Store leg не найден в маршруте.", "ℹ️");
+    }
+
+    // 3. Асинхронная часть: Получаем данные о партнёре через fetchEntityVariables
+    if (!senderLocationId) {
+        log("Отсутствует senderLocationId для запроса данных партнёра.", "⚠️", true);
+        if (typeof customSettings.onComplete === "function") customSettings.onComplete(false);
+        return;
+    }
+
+    eval(pm.globals.get("fetchEntityVariables"));
+
+    fetchEntityVariables({
+        entityType: "LOCATION",
+        entityIdOrArray: senderLocationId,
+        variablesMapping: [
+            { envVar: "partnerLocationId", field: "partnerLocationId" },
+            { envVar: "contractorId", field: "contractorId" }
+        ]
+    }, {
+        onComplete: function(success) {
+            if (success) {
+                if (!pm.environment.get("partnerLocationId")) {
+                    pm.environment.set("partnerLocationId", senderLocationId);
+                }
+                if (!pm.environment.get("contractorId")) {
+                    pm.environment.set("contractorId", '');
+                }
+                log("Данные о партнёре успешно обработаны.", "🎉");
+            } else {
+                log("Не удалось получить данные о партнёре, используются значения по умолчанию.", "⚠️");
+                pm.environment.set("partnerLocationId", senderLocationId);
+                pm.environment.set("contractorId", '');
+            }
+            if (typeof customSettings.onComplete === "function") customSettings.onComplete(success);
+        }
+    });
+}
+`);

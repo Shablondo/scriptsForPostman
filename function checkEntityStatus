@@ -1,0 +1,81 @@
+pm.globals.set("checkEntityStatus", `function checkEntityStatus(checks) {
+    if (!Array.isArray(checks)) {
+        checks = [checks]; // Если передан один объект, преобразуем в массив
+    }
+
+    checks.forEach(check => {
+        const { entityType, expectedStatuses, idVariableOrArray } = check;
+        const enableStatus = pm.globals.get("ENABLE_STATUS_CHECK");
+        if (!(enableStatus === true || enableStatus === "true")) return;
+
+        const retrySettings = JSON.parse(pm.globals.get("RETRY_SETTINGS")).STATUS_CHECK;
+        const logSettings = JSON.parse(pm.globals.get("LOG_SETTINGS")).STATUS_CHECK;
+        const serviceConfig = JSON.parse(pm.globals.get("STATUS_CHECKERS_CONFIG"))[entityType];
+
+        if (!serviceConfig) throw new Error("Неизвестный тип сущности: " + entityType);
+
+        const finalRetry = { ...retrySettings };
+        const finalLog = { ...logSettings };
+
+        const idVariables = Array.isArray(idVariableOrArray) ? idVariableOrArray : [idVariableOrArray];
+        const targetStatuses = Array.isArray(expectedStatuses) ? expectedStatuses : [expectedStatuses];
+
+        function log(message, emoji = "") {
+            if (finalLog.VERBOSE) {
+                console.log(\`\${finalLog.PREFIX} \${serviceConfig.type} \${emoji} \${message}\`);
+            }
+        }
+
+        function checkSingleId(idVariable) {
+            let attemptCount = 0;
+            const statusesString = targetStatuses.join('", "');
+
+            function fetchStatus() {
+                let url = \`https://\${serviceConfig.serviceName}\${pm.globals.get("env")}\${serviceConfig.endpoint}\`;
+
+                if (serviceConfig.queryParam) {
+                    url += \`?\${serviceConfig.queryParam}=\${encodeURIComponent(idVariable)}\`;
+                } else {
+                    url += \`/\${idVariable}\`;
+                }
+
+                pm.sendRequest({ url: url, method: 'GET' }, (err, res) => {
+                    attemptCount++;
+
+                    if (err) {
+                        log(\`Попытка \${attemptCount}/\${finalRetry.MAX_ATTEMPTS} (ID: \${idVariable}): \${err.message}\`, "⚠️");
+                        if (attemptCount < finalRetry.MAX_ATTEMPTS) {
+                            setTimeout(fetchStatus, finalRetry.DELAY_MS);
+                        }
+                        return;
+                    }
+
+                    const data = res.json();
+                    const dataObj = Array.isArray(data) ? data[0] : data;
+                    const currentStatus = dataObj?.status;
+
+                    if (targetStatuses.includes(currentStatus)) {
+                        log(\`Успех: статус "\${currentStatus}" (ID: \${idVariable})\`, "✅");
+                        pm.test(\`Статус \${currentStatus} подтвержден для \${serviceConfig.type} (ID: \${idVariable})\`, () => {
+                            pm.expect(targetStatuses).to.include(currentStatus);
+                        });
+                    } else if (attemptCount < finalRetry.MAX_ATTEMPTS) {
+                        log(\`Текущий: "\${currentStatus || 'нет'}", ожидается: "\${statusesString}" (ID: \${idVariable})\`, "🔄");
+                        setTimeout(fetchStatus, finalRetry.DELAY_MS);
+                    } else {
+                        pm.test(\`Неверный статус для \${serviceConfig.type} (ID: \${idVariable})\`, () => {
+                            pm.expect.fail(\`Ожидалось: "\${statusesString}", получен: "\${currentStatus}"\`);
+                        });
+                    }
+                });
+            }
+
+            log(\`Проверка статусов (ожидается: "\${statusesString}") для ID: \${idVariable}\`);
+            fetchStatus();
+        }
+
+        idVariables.forEach(id => {
+            if (id) checkSingleId(id);
+        });
+    });
+}`);
